@@ -1,14 +1,13 @@
-import { initializeApp, getApps } from '@react-native-firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 
 export const firebaseConfig = {
-  apiKey:            'YOUR_API_KEY',
-  authDomain:        'YOUR_PROJECT_ID.firebaseapp.com',
-  projectId:         'YOUR_PROJECT_ID',
-  storageBucket:     'YOUR_PROJECT_ID.appspot.com',
-  messagingSenderId: 'YOUR_SENDER_ID',
-  appId:             'YOUR_APP_ID',
+  apiKey:            'AIzaSyDgIh4UisDNYqoEnim4py_rFATYxoKphfc',
+  authDomain:        'splitlens-539e7.firebaseapp.com',
+  projectId:         'splitlens-539e7',
+  storageBucket:     'splitlens-539e7.firebasestorage.app',
+  messagingSenderId: '217501293972',
+  appId:             '1:217501293972:web:595cfd768c6ac6433ac381',
 };
 
-if (getApps().length === 0) {
-  initializeApp(firebaseConfig);
-}
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+export default app;

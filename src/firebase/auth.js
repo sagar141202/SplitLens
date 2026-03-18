@@ -1,46 +1,74 @@
-import auth      from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import {
+  initializeAuth,
+  getAuth,
+  getReactNativePersistence,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile as firebaseUpdateProfile,
+  signOut as firebaseSignOut,
+  onAuthStateChanged as firebaseOnAuthStateChanged,
+} from 'firebase/auth';
+import {
+  getFirestore,
+  doc, setDoc, getDoc, updateDoc, serverTimestamp,
+} from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import app from './config';
+
+let auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+} catch (e) {
+  auth = getAuth(app);
+}
+
+const db = getFirestore(app);
 
 export async function signUp({ name, email, password, upi }) {
-  const { user } = await auth().createUserWithEmailAndPassword(email, password);
-  await user.updateProfile({ displayName: name });
-  await firestore().collection('users').doc(user.uid).set({
-    uid:       user.uid,
+  const { user } = await createUserWithEmailAndPassword(auth, email, password);
+  await firebaseUpdateProfile(user, { displayName: name });
+  await setDoc(doc(db, 'users', user.uid), {
+    uid:        user.uid,
     name,
     email,
-    upi:       upi ?? '',
-    avatar:    name.charAt(0).toUpperCase(),
-    createdAt: firestore.FieldValue.serverTimestamp(),
+    upi:        upi ?? '',
+    avatar:     name.charAt(0).toUpperCase(),
+    createdAt:  serverTimestamp(),
     totalSplit: 0,
-    groups:    [],
-    friends:   [],
+    groups:     [],
+    friends:    [],
   });
   return user;
 }
 
 export async function signIn({ email, password }) {
-  const { user } = await auth().signInWithEmailAndPassword(email, password);
+  const { user } = await signInWithEmailAndPassword(auth, email, password);
   return user;
 }
 
 export async function signOut() {
-  await auth().signOut();
+  await firebaseSignOut(auth);
 }
 
 export async function resetPassword(email) {
-  await auth().sendPasswordResetEmail(email);
+  await sendPasswordResetEmail(auth, email);
 }
 
 export async function getUserProfile(uid) {
-  const doc = await firestore().collection('users').doc(uid).get();
-  return doc.exists ? doc.data() : null;
+  const snap = await getDoc(doc(db, 'users', uid));
+  return snap.exists() ? snap.data() : null;
 }
 
 export async function updateProfile({ uid, name, upi }) {
-  await firestore().collection('users').doc(uid).update({ name, upi });
-  await auth().currentUser?.updateProfile({ displayName: name });
+  await updateDoc(doc(db, 'users', uid), { name, upi });
+  if (auth.currentUser) {
+    await firebaseUpdateProfile(auth.currentUser, { displayName: name });
+  }
 }
 
 export function onAuthStateChanged(callback) {
-  return auth().onAuthStateChanged(callback);
+  return firebaseOnAuthStateChanged(auth, callback);
 }

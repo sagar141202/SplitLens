@@ -8,6 +8,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import './src/firebase/config';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { DataProvider } from './src/context/DataContext';
 import LoginScreen    from './src/screens/auth/LoginScreen';
 import SignupScreen   from './src/screens/auth/SignupScreen';
 import HomeScreen     from './src/screens/HomeScreen';
@@ -64,10 +65,12 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer>
-          <StatusBar style="light" />
-          <RootNavigator />
-        </NavigationContainer>
+        <DataProvider>
+          <NavigationContainer>
+            <StatusBar style="light" />
+            <RootNavigator />
+          </NavigationContainer>
+        </DataProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
