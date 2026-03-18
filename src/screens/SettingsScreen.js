@@ -1,176 +1,308 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet,
-  Animated, Pressable, Switch, Alert,
+  View, Text, ScrollView, StyleSheet, Animated,
+  Pressable, Switch, Alert, Modal, TextInput,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import MeshBackground from '../components/MeshBackground';
-import GlassCard from '../components/GlassCard';
-import { COLORS, RADIUS, SPACE } from '../theme';
+import { useAuth } from '../context/AuthContext';
+import { updateProfile } from '../firebase/auth';
 
-const PROFILE = {
-  name:    'Rahul Sharma',
-  upi:     'rahul@ybl',
-  avatar:  'R',
-  totalSplit: '₹1,24,800',
-  groups:  4,
-  friends: 12,
-};
+// ── Edit Profile Modal ────────────────────────────────────
+function EditProfileModal({ visible, onClose, profile }) {
+  const [name, setName] = useState(profile?.name ?? '');
+  const [upi,  setUpi]  = useState(profile?.upi  ?? '');
+  const [loading, setLoading] = useState(false);
 
-const SETTINGS_SECTIONS = [
-  {
-    title: 'Preferences',
-    items: [
-      { label: 'Default Currency', value: 'INR ₹', icon: '💱' },
-      { label: 'Split Method',     value: 'Equal',  icon: '÷' },
-      { label: 'Notifications',    value: 'toggle', icon: '🔔' },
-    ],
-  },
-  {
-    title: 'Integrations',
-    items: [
-      { label: 'UPI AutoPay',   value: 'Connected',    icon: '⚡', color: COLORS.accent.success },
-      { label: 'Google Pay',    value: 'Connect',      icon: '🔗', color: COLORS.accent.primary },
-      { label: 'PhonePe',       value: 'Connect',      icon: '🔗', color: COLORS.accent.primary },
-    ],
-  },
-  {
-    title: 'Data',
-    items: [
-      { label: 'Export CSV',      value: '',         icon: '📤' },
-      { label: 'Backup to Drive', value: '',         icon: '☁️' },
-      { label: 'Clear History',   value: '',         icon: '🗑️', danger: true },
-    ],
-  },
-];
+  useEffect(() => {
+    if (visible) { setName(profile?.name ?? ''); setUpi(profile?.upi ?? ''); }
+  }, [visible, profile]);
 
-function SettingRow({ item }) {
-  const isToggle = item.value === 'toggle';
-  const [toggled, setToggled] = React.useState(true);
+  const handleSave = async () => {
+    if (!name.trim()) { Alert.alert('Missing', 'Name cannot be empty.'); return; }
+    try {
+      setLoading(true);
+      await updateProfile({ uid: profile?.uid, name: name.trim(), upi: upi.trim() });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Saved!', 'Your profile has been updated.');
+      onClose();
+    } catch (err) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <Pressable
-      style={styles.settingRow}
-      onPress={() => {
-        if (item.danger) Alert.alert('Clear History', 'Are you sure? This cannot be undone.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Clear', style: 'destructive' },
-        ]);
-      }}
-    >
-      <View style={[styles.settingIcon, { backgroundColor: (item.color ?? COLORS.glass.white10) + '22' }]}>
-        <Text style={{ fontSize: 16 }}>{item.icon}</Text>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex:1 }} behavior={Platform.OS==='ios'?'padding':'height'}>
+        <Pressable style={e.overlay} onPress={onClose} />
+        <View style={e.sheet}>
+          <View style={e.sheetBase} />
+          <BlurView intensity={60} tint="dark" style={[StyleSheet.absoluteFillObject,{borderRadius:28}]} />
+          <LinearGradient colors={['rgba(22,10,60,0.97)','rgba(12,6,36,0.99)']} style={[StyleSheet.absoluteFillObject,{borderRadius:28}]} />
+          <LinearGradient colors={['transparent','rgba(123,97,255,0.7)','rgba(0,212,255,0.5)','transparent']} style={e.topBorder} start={{x:0,y:0}} end={{x:1,y:0}} />
+
+          <View style={e.handle} />
+          <Text style={e.title}>Edit Profile</Text>
+
+          <Text style={e.label}>Full Name</Text>
+          <View style={e.inputWrap}>
+            <View style={e.inputBase} />
+            <TextInput style={e.input} value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor="rgba(255,255,255,0.3)" autoCapitalize="words" />
+          </View>
+
+          <Text style={[e.label, { marginTop:16 }]}>UPI ID</Text>
+          <View style={e.inputWrap}>
+            <View style={e.inputBase} />
+            <TextInput style={e.input} value={upi} onChangeText={setUpi} placeholder="name@ybl" placeholderTextColor="rgba(255,255,255,0.3)" autoCapitalize="none" />
+          </View>
+
+          <View style={e.btnRow}>
+            <Pressable onPress={onClose} style={e.cancelBtn}>
+              <Text style={e.cancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={handleSave} disabled={loading} style={{ flex:1 }}>
+              <LinearGradient colors={['#7B61FF','#00D4FF']} style={e.saveBtn} start={{x:0,y:0}} end={{x:1,y:0}}>
+                {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={e.saveText}>Save Changes</Text>}
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ── Setting Row ───────────────────────────────────────────
+function SettingRow({ icon, label, value, onPress, isToggle, toggled, onToggle, danger, color, showArrow }) {
+  return (
+    <Pressable style={s.row} onPress={onPress}>
+      <View style={[s.rowIcon, { backgroundColor: danger ? 'rgba(255,77,109,0.15)' : (color ? color+'22' : 'rgba(255,255,255,0.08)') }]}>
+        <Text style={{ fontSize:16 }}>{icon}</Text>
       </View>
-      <Text style={[styles.settingLabel, item.danger && { color: COLORS.accent.danger }]}>{item.label}</Text>
+      <Text style={[s.rowLabel, danger && { color:'#FF4D6D' }]}>{label}</Text>
       {isToggle ? (
-        <Switch
-          value={toggled}
-          onValueChange={setToggled}
-          trackColor={{ false: COLORS.glass.white10, true: COLORS.accent.primary }}
-          thumbColor="#fff"
-        />
+        <Switch value={toggled} onValueChange={onToggle} trackColor={{ false:'rgba(255,255,255,0.12)', true:'#7B61FF' }} thumbColor="#fff" />
       ) : (
-        <Text style={[styles.settingValue, item.color && { color: item.color }]}>
-          {item.value} {item.value && !item.danger && '›'}
+        <Text style={[s.rowValue, color && { color }]}>
+          {value}{showArrow && value ? ' ›' : ''}
         </Text>
       )}
     </Pressable>
   );
 }
 
+// ── Main Screen ───────────────────────────────────────────
 export default function SettingsScreen() {
-  const insets = useSafeAreaInsets();
+  const insets  = useSafeAreaInsets();
+  const { profile, logout } = useAuth();
+  const [showEdit, setShowEdit]       = useState(false);
+  const [notifs,   setNotifs]         = useState(true);
+  const [currency, setCurrency]       = useState('INR ₹');
+  const [loggingOut, setLoggingOut]   = useState(false);
   const headerFade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(headerFade, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    Animated.timing(headerFade, { toValue:1, duration:600, useNativeDriver:true }).start();
   }, []);
+
+  const name   = profile?.name  ?? 'User';
+  const upi    = profile?.upi   ?? 'No UPI set';
+  const avatar = profile?.avatar ?? name.charAt(0).toUpperCase();
+  const email  = profile?.email ?? '';
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text:'Cancel', style:'cancel' },
+        {
+          text:'Sign Out',
+          style:'destructive',
+          onPress: async () => {
+            try {
+              setLoggingOut(true);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              await logout();
+            } catch (err) {
+              Alert.alert('Error', err.message);
+              setLoggingOut(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCurrencyToggle = () => {
+    const options = ['INR ₹','USD $','EUR €','GBP £'];
+    const next = options[(options.indexOf(currency)+1) % options.length];
+    setCurrency(next);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert('Currency changed', `Default currency set to ${next}`);
+  };
 
   return (
     <MeshBackground>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: 120 }]}
+        contentContainerStyle={[s.scroll, { paddingTop: insets.top+20, paddingBottom:130 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile hero */}
         <Animated.View style={{ opacity: headerFade }}>
-          <GlassCard padding={24} borderRadius={RADIUS.xl} glowColor={COLORS.accent.primary} style={{ marginBottom: SPACE.xl }}>
-            <LinearGradient colors={['rgba(123,97,255,0.3)', 'transparent']} style={StyleSheet.absoluteFillObject} />
 
-            <View style={styles.profileRow}>
-              <LinearGradient colors={['#7B61FF', '#00D4FF']} style={styles.profileAvatar}>
-                <Text style={styles.profileAvatarText}>{PROFILE.avatar}</Text>
-              </LinearGradient>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.profileName}>{PROFILE.name}</Text>
-                <Text style={styles.profileUpi}>{PROFILE.upi}</Text>
-              </View>
-              <Pressable>
-                <Text style={styles.editBtn}>Edit</Text>
-              </Pressable>
-            </View>
+          {/* ── Profile Card ── */}
+          <View style={s.profileCard}>
+            <View style={s.profileCardBase} />
+            <BlurView intensity={30} tint="dark" style={[StyleSheet.absoluteFillObject,{borderRadius:24}]} />
+            <LinearGradient colors={['rgba(123,97,255,0.20)','rgba(0,212,255,0.08)']} style={[StyleSheet.absoluteFillObject,{borderRadius:24}]} />
+            <LinearGradient colors={['transparent','rgba(123,97,255,0.6)','rgba(0,212,255,0.4)','transparent']} style={s.profileTopBorder} start={{x:0,y:0}} end={{x:1,y:0}} />
+            <View style={s.profileBorder} />
 
-            {/* Stats */}
-            <View style={styles.profileStats}>
-              {[
-                { val: PROFILE.totalSplit, lbl: 'Total Split' },
-                { val: PROFILE.groups,     lbl: 'Groups' },
-                { val: PROFILE.friends,    lbl: 'Friends' },
-              ].map((s, i) => (
-                <View key={i} style={[styles.profileStat, i > 0 && { borderLeftWidth: 0.5, borderLeftColor: COLORS.glass.borderSub }]}>
-                  <Text style={styles.profileStatVal}>{s.val}</Text>
-                  <Text style={styles.profileStatLbl}>{s.lbl}</Text>
+            <View style={s.profileInner}>
+              <View style={s.profileRow}>
+                <LinearGradient colors={['#7B61FF','#00D4FF']} style={s.avatar}>
+                  <Text style={s.avatarText}>{avatar}</Text>
+                </LinearGradient>
+                <View style={{ flex:1 }}>
+                  <Text style={s.profileName}>{name}</Text>
+                  <Text style={s.profileEmail}>{email}</Text>
+                  {upi !== 'No UPI set' && <Text style={s.profileUpi}>⚡ {upi}</Text>}
                 </View>
-              ))}
-            </View>
-          </GlassCard>
+                <Pressable onPress={() => setShowEdit(true)} style={s.editBtn}>
+                  <Text style={s.editBtnText}>Edit</Text>
+                </Pressable>
+              </View>
 
-          {/* Settings sections */}
-          {SETTINGS_SECTIONS.map((section) => (
-            <View key={section.title} style={{ marginBottom: SPACE.lg }}>
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-              <GlassCard padding={0} borderRadius={RADIUS.lg}>
-                {section.items.map((item, i) => (
-                  <View key={item.label}>
-                    {i > 0 && <View style={styles.divider} />}
-                    <SettingRow item={item} />
+              <View style={s.statsRow}>
+                {[
+                  { val: '₹0',  lbl:'Total Split' },
+                  { val: '0',   lbl:'Groups' },
+                  { val: '0',   lbl:'Friends' },
+                ].map((stat, i) => (
+                  <View key={i} style={[s.statItem, i > 0 && s.statBorder]}>
+                    <Text style={s.statVal}>{stat.val}</Text>
+                    <Text style={s.statLbl}>{stat.lbl}</Text>
                   </View>
                 ))}
-              </GlassCard>
+              </View>
             </View>
-          ))}
+          </View>
 
-          {/* Version */}
-          <Text style={styles.version}>SplitLens v1.0.0 · Made with 💜</Text>
+          {/* ── Preferences ── */}
+          <Text style={s.sectionLabel}>Preferences</Text>
+          <View style={s.section}>
+            <SettingRow icon="💱" label="Default Currency" value={currency} onPress={handleCurrencyToggle} showArrow />
+            <View style={s.divider} />
+            <SettingRow icon="÷" label="Split Method" value="Equal" onPress={() => Alert.alert('Split Method', 'Choose how to split\n\n• Equal split\n• Percentage\n• Custom amounts', [{text:'Equal', onPress:()=>{}},{text:'Cancel',style:'cancel'}])} showArrow />
+            <View style={s.divider} />
+            <SettingRow icon="🔔" label="Notifications" isToggle toggled={notifs} onToggle={(v) => { setNotifs(v); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} />
+          </View>
+
+          {/* ── Account ── */}
+          <Text style={s.sectionLabel}>Account</Text>
+          <View style={s.section}>
+            <SettingRow icon="🔒" label="Change Password" value="" onPress={() => Alert.alert('Change Password', 'A password reset email will be sent to:\n'+email, [{text:'Send Email', onPress:()=>{}},{text:'Cancel',style:'cancel'}])} showArrow />
+            <View style={s.divider} />
+            <SettingRow icon="📤" label="Export Data" value="" onPress={() => Alert.alert('Export', 'Your data will be exported as CSV and sent to '+email)} showArrow />
+            <View style={s.divider} />
+            <SettingRow icon="🗑️" label="Delete Account" value="" danger onPress={() => Alert.alert('Delete Account', 'This will permanently delete all your data. This cannot be undone.', [{text:'Cancel',style:'cancel'},{text:'Delete',style:'destructive',onPress:()=>{}}])} />
+          </View>
+
+          {/* ── About ── */}
+          <Text style={s.sectionLabel}>About</Text>
+          <View style={s.section}>
+            <SettingRow icon="ℹ️" label="Version" value="1.0.0" />
+            <View style={s.divider} />
+            <SettingRow icon="⭐" label="Rate SplitLens" value="" onPress={() => Alert.alert('Rate us!', 'Thank you for using SplitLens 💜')} showArrow />
+            <View style={s.divider} />
+            <SettingRow icon="📋" label="Privacy Policy" value="" onPress={() => Alert.alert('Privacy Policy', 'Your data is stored securely in Firebase and never shared with third parties.')} showArrow />
+          </View>
+
+          {/* ── Logout Button ── */}
+          <Pressable onPress={handleLogout} disabled={loggingOut} style={s.logoutWrap}>
+            <View style={s.logoutBase} />
+            <BlurView intensity={20} tint="dark" style={[StyleSheet.absoluteFillObject,{borderRadius:16}]} />
+            <LinearGradient colors={['rgba(255,77,109,0.20)','rgba(255,77,109,0.08)']} style={[StyleSheet.absoluteFillObject,{borderRadius:16}]} />
+            <View style={s.logoutBorder} />
+            {loggingOut
+              ? <ActivityIndicator color="#FF4D6D" size="small" />
+              : <>
+                  <Text style={s.logoutIcon}>🚪</Text>
+                  <Text style={s.logoutText}>Sign Out</Text>
+                </>
+            }
+          </Pressable>
+
+          <Text style={s.footer}>SplitLens v1.0.0 · Made with 💜 for Sagar</Text>
         </Animated.View>
       </ScrollView>
+
+      <EditProfileModal visible={showEdit} onClose={() => setShowEdit(false)} profile={profile} />
     </MeshBackground>
   );
 }
 
-const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: SPACE.lg },
+const s = StyleSheet.create({
+  scroll: { paddingHorizontal:18 },
 
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: SPACE.lg },
-  profileAvatar: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
-  profileAvatarText: { color: '#fff', fontSize: 24, fontWeight: '800' },
-  profileName: { color: COLORS.text.primary, fontSize: 18, fontWeight: '700' },
-  profileUpi:  { color: COLORS.text.tertiary, fontSize: 13, marginTop: 2 },
-  editBtn:     { color: COLORS.accent.primary, fontSize: 14, fontWeight: '600' },
+  profileCard:      { borderRadius:24, overflow:'hidden', marginBottom:24 },
+  profileCardBase:  { ...StyleSheet.absoluteFillObject, borderRadius:24, backgroundColor:'rgba(14,8,44,0.92)' },
+  profileTopBorder: { position:'absolute', top:0, left:0, right:0, height:1 },
+  profileBorder:    { ...StyleSheet.absoluteFillObject, borderRadius:24, borderWidth:1, borderColor:'rgba(255,255,255,0.16)' },
+  profileInner:     { padding:20 },
+  profileRow:       { flexDirection:'row', alignItems:'center', gap:14, marginBottom:18 },
+  avatar:           { width:58, height:58, borderRadius:29, alignItems:'center', justifyContent:'center', shadowColor:'#7B61FF', shadowOffset:{width:0,height:4}, shadowOpacity:0.5, shadowRadius:12, elevation:8 },
+  avatarText:       { color:'#fff', fontSize:22, fontWeight:'800' },
+  profileName:      { color:'#FFFFFF', fontSize:18, fontWeight:'800', marginBottom:2 },
+  profileEmail:     { color:'rgba(255,255,255,0.50)', fontSize:12 },
+  profileUpi:       { color:'rgba(255,255,255,0.45)', fontSize:12, marginTop:2 },
+  editBtn:          { paddingHorizontal:14, paddingVertical:7, borderRadius:50, borderWidth:1, borderColor:'rgba(123,97,255,0.5)', backgroundColor:'rgba(123,97,255,0.12)' },
+  editBtnText:      { color:'#A78BFA', fontSize:13, fontWeight:'700' },
 
-  profileStats: { flexDirection: 'row', borderTopWidth: 0.5, borderTopColor: COLORS.glass.borderSub, paddingTop: SPACE.md },
-  profileStat:  { flex: 1, alignItems: 'center', paddingVertical: 4 },
-  profileStatVal: { color: COLORS.text.primary, fontSize: 16, fontWeight: '800' },
-  profileStatLbl: { color: COLORS.text.tertiary, fontSize: 11, marginTop: 2 },
+  statsRow:   { flexDirection:'row', borderTopWidth:1, borderTopColor:'rgba(255,255,255,0.10)', paddingTop:14 },
+  statItem:   { flex:1, alignItems:'center', gap:3 },
+  statBorder: { borderLeftWidth:1, borderLeftColor:'rgba(255,255,255,0.10)' },
+  statVal:    { color:'#FFFFFF', fontSize:17, fontWeight:'800' },
+  statLbl:    { color:'rgba(255,255,255,0.45)', fontSize:11, fontWeight:'600' },
 
-  sectionTitle: { color: COLORS.text.tertiary, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8, marginLeft: 4 },
+  sectionLabel: { color:'rgba(255,255,255,0.40)', fontSize:11, fontWeight:'700', letterSpacing:1.2, textTransform:'uppercase', marginBottom:8, marginLeft:4 },
 
-  settingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.md, paddingVertical: 14, gap: 12 },
-  settingIcon: { width: 36, height: 36, borderRadius: RADIUS.sm, alignItems: 'center', justifyContent: 'center' },
-  settingLabel: { flex: 1, color: COLORS.text.primary, fontSize: 15 },
-  settingValue: { color: COLORS.text.tertiary, fontSize: 14 },
+  section:  { borderRadius:18, overflow:'hidden', marginBottom:22 },
+  row:      { flexDirection:'row', alignItems:'center', padding:15, gap:13, backgroundColor:'rgba(14,8,44,0.90)' },
+  rowIcon:  { width:36, height:36, borderRadius:10, alignItems:'center', justifyContent:'center' },
+  rowLabel: { flex:1, color:'#FFFFFF', fontSize:15, fontWeight:'500' },
+  rowValue: { color:'rgba(255,255,255,0.45)', fontSize:14 },
+  divider:  { height:1, backgroundColor:'rgba(255,255,255,0.06)', marginLeft:64, backgroundColor:'rgba(255,255,255,0.07)' },
 
-  divider: { height: 0.5, backgroundColor: COLORS.glass.borderSub, marginLeft: 60 },
-  version: { textAlign: 'center', color: COLORS.text.muted, fontSize: 12, marginTop: SPACE.xl },
+  logoutWrap:   { borderRadius:16, overflow:'hidden', height:56, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:10, marginBottom:24 },
+  logoutBase:   { ...StyleSheet.absoluteFillObject, borderRadius:16, backgroundColor:'rgba(14,8,44,0.90)' },
+  logoutBorder: { ...StyleSheet.absoluteFillObject, borderRadius:16, borderWidth:1, borderColor:'rgba(255,77,109,0.40)' },
+  logoutIcon:   { fontSize:18 },
+  logoutText:   { color:'#FF4D6D', fontSize:16, fontWeight:'800', letterSpacing:0.3 },
+
+  footer: { textAlign:'center', color:'rgba(255,255,255,0.22)', fontSize:12, marginBottom:8 },
+});
+
+const e = StyleSheet.create({
+  overlay:   { flex:1, backgroundColor:'rgba(0,0,0,0.5)' },
+  sheet:     { borderTopLeftRadius:28, borderTopRightRadius:28, overflow:'hidden', padding:24, paddingBottom:40 },
+  sheetBase: { ...StyleSheet.absoluteFillObject, backgroundColor:'#0E0730', borderTopLeftRadius:28, borderTopRightRadius:28 },
+  topBorder: { position:'absolute', top:0, left:0, right:0, height:1 },
+  handle:    { width:40, height:4, borderRadius:2, backgroundColor:'rgba(255,255,255,0.22)', alignSelf:'center', marginBottom:20 },
+  title:     { color:'#FFFFFF', fontSize:22, fontWeight:'800', marginBottom:20 },
+  label:     { color:'rgba(255,255,255,0.55)', fontSize:12, fontWeight:'700', letterSpacing:0.8, textTransform:'uppercase', marginBottom:8 },
+  inputWrap: { borderRadius:14, overflow:'hidden', borderWidth:1, borderColor:'rgba(255,255,255,0.18)' },
+  inputBase: { ...StyleSheet.absoluteFillObject, backgroundColor:'rgba(14,8,44,0.92)', borderRadius:14 },
+  input:     { color:'#FFFFFF', fontSize:15, fontWeight:'500', padding:14 },
+  btnRow:    { flexDirection:'row', gap:12, marginTop:24 },
+  cancelBtn: { height:54, borderRadius:14, borderWidth:1.5, borderColor:'rgba(255,255,255,0.20)', paddingHorizontal:20, alignItems:'center', justifyContent:'center', backgroundColor:'rgba(255,255,255,0.06)' },
+  cancelText:{ color:'rgba(255,255,255,0.65)', fontSize:15, fontWeight:'700' },
+  saveBtn:   { height:54, borderRadius:14, alignItems:'center', justifyContent:'center' },
+  saveText:  { color:'#fff', fontSize:15, fontWeight:'800' },
 });
